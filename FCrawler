@@ -1,0 +1,174 @@
+import urllib.request, re, traceback, time, os, random
+from threading import Lock, Thread
+from bs4 import BeautifulSoup
+
+def search(url):
+	
+	#Data
+	report = ""
+	
+	try:
+		
+		#Page request	
+		html = urllib.request.urlopen(url)
+		htmltext = html.read()
+			
+		report += "----------------------------------------------------------------------  \n"
+		report += "We are in " + html.geturl() + "\n"
+		report += find(htmltext)
+		report += "----------------------------------------------------------------------  \n"
+
+		html.close()
+			
+	except Exception as e:
+		print(e)
+
+def define():
+		global lock 
+		lock = Lock()
+
+def find(htmltext):
+	
+	#Regex to be found
+	soup = BeautifulSoup(htmltext)
+	report = ""
+	
+	reply = soup.findAll("table", cellpadding= '5', cellspacing = '0', style="table-layout: fixed;")
+	
+	name = []
+	comment = []
+	
+	for t in reply:
+		
+		try:
+			tname = t.find('a',title=(re.compile("View the profile of (.+?)"))).text
+			
+			if (not tname in name):
+				name.append(tname)
+			
+				tgender = t.findAll('img')
+				gender = "\n Gender: \n"  
+			
+				for i in range(len(tgender)):
+					if(tgender[i]['alt'] == 'Male' or tgender[i]['alt'] == 'Female'):
+						gender = "\n Gender: " + tgender[i]['alt'] + "\n"
+		
+				temp = tname + gender +(t.find("td",{'class' : 'smalltext'}, valign = "bottom").text)
+			
+				temp = re.sub('\n+','\n',temp)
+				temp = re.sub('\t+','',temp)
+			
+			
+				if(not os.path.isfile('thread/profile/'+ tname +'.txt')):
+					submit(tname,temp)
+
+		except Exception as e:
+			print(e)
+
+	return report
+	
+def next(url):
+	#Read page
+	html = urllib.request.urlopen(url)
+	htmltext = html.read()
+	
+	soup = BeautifulSoup(htmltext)
+	
+	#Next tag
+	navPages = soup.findAll('a', {'class' : 'navPages'}, text = re.compile("[0-9]+"))
+	
+	list = []
+	#Insert into new list
+	for page in set(navPages):
+		list.append(page['href'])
+	
+	html.close()
+	return(set(list))
+		
+
+def removeNonAscii(s): 
+	return "".join(i for i in s if ord(i)<128)	
+
+def submit(name, result):
+	
+	name = re.sub('[<>*!-"/]*','',name)
+	
+	try:
+
+		myFile = open("thread/profile/"+ name +".txt", "w+")
+		
+	except Exception as e:
+		print(e)
+
+	result = removeNonAscii(result)
+	
+	#Write to file
+	myFile.write(result)
+	myFile.close()
+
+def clean():
+	print("done")
+	
+	
+def getThreadList(baseurl):
+	url = []
+	check = ""
+	#Get all thread urls for x page in range
+	
+	for i in range(1000):
+		
+		html = urllib.request.urlopen(baseurl+ str(i*30) +".html")
+		htmltext = html.read()
+		soup = BeautifulSoup(htmltext)
+		#Determine number of threads in page and create url list
+		url += soup.find_all('a', href= re.compile("http://ssdfacts.com/forum/index.php\?topic=[0-9](?:\d{3}|\d{2}|\d{1}|\d{0})\.[0-9](?:\d{2}|\d{1}|\d{0})(?!\S)"))
+		
+		html.close()
+		
+		try :
+			
+			if(len(url) > 2 and check == url[len(url) -1] ):
+				url = set(url)
+				return url
+		
+			check = url[len(url) -1]
+	
+		except Exception as e:
+			print(e)
+			break
+			
+	#Remove duplicate
+	url = set(url)
+	return url
+	
+
+def main():
+	
+	#URL visited
+	hit = []
+	
+	#For each page 
+	for i in range(40,-1,-1): 
+		print(i)
+		
+		baseurl = "http://ssdfacts.com/forum/index.php/board,"+str(i)+"."
+		
+		#URL on on baseurl page
+		url = []
+		url = getThreadList(baseurl)
+		
+		#Report 
+		print("Links : " + str(len(url)))
+	
+		#For each URL search
+		for a in url:
+			print(a['href'])
+			if not a['href'] in hit:
+				search(a['href'])
+				hit.append(a['href'])
+				time.sleep(random.randint(5,10))
+		
+	clean()			
+
+main()
+	
